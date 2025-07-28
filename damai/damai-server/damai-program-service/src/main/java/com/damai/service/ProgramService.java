@@ -370,27 +370,32 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
     }
     
     /**
-     * 组装节目参数
+     * 组装节目参数,根据入参timeType的不同,对startDateTime和endDateTime进行设值
      * @param programPageListDto 节目数据的入参
      * */
     public void setQueryTime(ProgramPageListDto programPageListDto){
         switch (programPageListDto.getTimeType()) {
+            //今天
             case ProgramTimeType.TODAY:
                 programPageListDto.setStartDateTime(DateUtils.now(FORMAT_DATE));
                 programPageListDto.setEndDateTime(DateUtils.now(FORMAT_DATE));
                 break;
+            //明天
             case ProgramTimeType.TOMORROW:
                 programPageListDto.setStartDateTime(DateUtils.now(FORMAT_DATE));
                 programPageListDto.setEndDateTime(DateUtils.addDay(DateUtils.now(FORMAT_DATE),1));
                 break;
+            //一周内
             case ProgramTimeType.WEEK:
                 programPageListDto.setStartDateTime(DateUtils.now(FORMAT_DATE));
                 programPageListDto.setEndDateTime(DateUtils.addWeek(DateUtils.now(FORMAT_DATE),1));
                 break;
+            //一个月内
             case ProgramTimeType.MONTH:
                 programPageListDto.setStartDateTime(DateUtils.now(FORMAT_DATE));
                 programPageListDto.setEndDateTime(DateUtils.addMonth(DateUtils.now(FORMAT_DATE),1));
                 break;
+            //按日历
             case ProgramTimeType.CALENDAR:
                 if (Objects.isNull(programPageListDto.getStartDateTime())) {
                     throw new DaMaiFrameException(BaseCode.START_DATE_TIME_NOT_EXIST);
@@ -399,6 +404,7 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
                     throw new DaMaiFrameException(BaseCode.END_DATE_TIME_NOT_EXIST);
                 }
                 break;
+            //(默认)全部
             default:
                 programPageListDto.setStartDateTime(null);
                 programPageListDto.setEndDateTime(null);
@@ -413,10 +419,12 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
      * */
     public PageVo<ProgramListVo> selectPage(ProgramPageListDto programPageListDto) {
         setQueryTime(programPageListDto);
+        //先从es中查询,因为没有查询条件中,没有节目主键id分片键,直接去数据库会造成读扩散
         PageVo<ProgramListVo> pageVo = programEs.selectPage(programPageListDto);
         if (CollectionUtil.isNotEmpty(pageVo.getList())) {
             return pageVo;
         }
+        //如果es查不到. 在数据库中查找
         return dbSelectPage(programPageListDto);
     }
     

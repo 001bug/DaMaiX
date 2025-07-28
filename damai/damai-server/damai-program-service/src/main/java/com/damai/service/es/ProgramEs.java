@@ -147,28 +147,33 @@ public class ProgramEs {
         try {
             List<EsDataQueryDto> esDataQueryDtoList = new ArrayList<>();
             if (Objects.nonNull(programPageListDto.getAreaId())) {
+                //地区id条件
                 EsDataQueryDto areaIdQueryDto = new EsDataQueryDto();
                 areaIdQueryDto.setParamName(ProgramDocumentParamName.AREA_ID);
                 areaIdQueryDto.setParamValue(programPageListDto.getAreaId());
                 esDataQueryDtoList.add(areaIdQueryDto);
             }else {
+                //如果用户没有选择地区id,只查询主要节目. 使用的是es的复杂查询,构建json
                 EsDataQueryDto primeQueryDto = new EsDataQueryDto();
                 primeQueryDto.setParamName(ProgramDocumentParamName.PRIME);
                 primeQueryDto.setParamValue(BusinessStatus.YES.getCode());
                 esDataQueryDtoList.add(primeQueryDto);
             }
+            //父节目类型条件(如演唱会)
             if (Objects.nonNull(programPageListDto.getParentProgramCategoryId())) {
                 EsDataQueryDto parentProgramCategoryIdQueryDto = new EsDataQueryDto();
                 parentProgramCategoryIdQueryDto.setParamName(ProgramDocumentParamName.PARENT_PROGRAM_CATEGORY_ID);
                 parentProgramCategoryIdQueryDto.setParamValue(programPageListDto.getParentProgramCategoryId());
                 esDataQueryDtoList.add(parentProgramCategoryIdQueryDto);
             }
+            //节目类型条件
             if (Objects.nonNull(programPageListDto.getProgramCategoryId())) {
                 EsDataQueryDto programCategoryIdQueryDto = new EsDataQueryDto();
                 programCategoryIdQueryDto.setParamName(ProgramDocumentParamName.PROGRAM_CATEGORY_ID);
                 programCategoryIdQueryDto.setParamValue(programPageListDto.getProgramCategoryId());
                 esDataQueryDtoList.add(programCategoryIdQueryDto);
             }
+            //开始日期和结束日期条件
             if (Objects.nonNull(programPageListDto.getStartDateTime()) && 
                     Objects.nonNull(programPageListDto.getEndDateTime())) {
                 EsDataQueryDto showDayTimeQueryDto = new EsDataQueryDto();
@@ -177,9 +182,9 @@ public class ProgramEs {
                 showDayTimeQueryDto.setEndTime(programPageListDto.getEndDateTime());
                 esDataQueryDtoList.add(showDayTimeQueryDto);
             }
-            
+            //构建排序信息
             ProgramPageOrder programPageOrder = getProgramPageOrder(programPageListDto);
-            
+            //效果:精确筛选(地区,分类,时间), 智能排序(热度,时间),分页处理
             PageInfo<ProgramListVo> programListVoPageInfo = businessEsHandle.queryPage(
                     SpringUtil.getPrefixDistinctionName() + "-" + ProgramDocumentParamName.INDEX_NAME,
                     ProgramDocumentParamName.INDEX_TYPE, esDataQueryDtoList, programPageOrder.sortParam, 

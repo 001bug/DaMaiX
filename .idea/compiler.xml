@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="damai-service-initialize" />
+        <module name="damai-service-gray-transition-base-framework" />
+        <module name="damai-job-client" />
+        <module name="damai-program-client" />
+        <module name="damai-pay-client" />
+        <module name="damai-service-delay-queue-framework" />
+        <module name="damai-admin-service" />
+        <module name="damai-mybatis-plus-service" />
+        <module name="damai-order-service" />
+        <module name="damai-bloom-filter-framework" />
+        <module name="damai-redis-common-framework" />
+        <module name="damai-user-client" />
+        <module name="damai-gateway-service" />
+        <module name="damai-customize-client" />
+        <module name="damai-pay-service" />
+        <module name="damai-service-common" />
+        <module name="damai-elasticsearch-framework" />
+        <module name="damai-customize-service" />
+        <module name="damai-service-gray-transition-gateway-framework" />
+        <module name="damai-thread-pool-framework" />
+        <module name="damai-service-component" />
+        <module name="damai-redisson-common-framework" />
+        <module name="damai-repeat-execute-limit-framework" />
+        <module name="damai-order-client" />
+        <module name="damai-base-data-client" />
+        <module name="damai-service-gray-transition-webmvc-framework" />
+        <module name="damai-base-captcha" />
+        <module name="damai-program-service" />
+        <module name="damai-common" />
+        <module name="damai-service-lock-framework" />
+        <module name="damai-id-generator-framework" />
+        <module name="damai-captcha-framework" />
+        <module name="damai-user-service" />
+        <module name="damai-redis-stream-framework" />
+        <module name="damai-base-data-service" />
+        <module name="damai-redis-framework" />
+      </profile>
+    </annotationProcessing>
+  </component>
+</project>
