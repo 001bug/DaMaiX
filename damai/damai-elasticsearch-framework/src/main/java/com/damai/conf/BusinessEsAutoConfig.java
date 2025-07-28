@@ -23,15 +23,18 @@ import java.util.Objects;
 
 /**
  * @program: 极度真实还原大麦网高并发实战项目。 添加 阿星不是程序员 微信，添加时备注 大麦 来获取项目的完整资料 
- * @description: elasticsearch配置
+ * @description: elasticsearch配置, 自动装配类. 通过属性类的方式. 可以使得不同环境,使用不同的配置方案
  * @author: 阿星不是程序员
  **/
+//启用配置属性绑定,让@ConfigurationProperties注解的类注册为Bean,并将文件中的属性值绑定到属性类
 @EnableConfigurationProperties(BusinessEsProperties.class)
 @ConditionalOnProperty(value = "elasticsearch.ip")
 public class BusinessEsAutoConfig {
 	private static final int ADDRESS_LENGTH = 2;
 	private static final String HTTP_SCHEME = "http";
-
+	/*
+	* 配置Elasticsearch的客户端
+	* */
 	@Bean
 	public RestClient businessEsRestClient(BusinessEsProperties businessEsProperties) {
 		String defaultValue = "default";
@@ -39,6 +42,7 @@ public class BusinessEsAutoConfig {
 				.toArray(HttpHost[]::new);
 		
 		RestClientBuilder builder = RestClient.builder(hosts);
+		//使用属性配置es
 		String userName = businessEsProperties.getUserName();
 		String passWord = businessEsProperties.getPassWord();
 		if (StringUtil.isNotEmpty(userName) && !defaultValue.equals(userName) && StringUtil.isNotEmpty(passWord) && !defaultValue.equals(passWord)) {
@@ -62,7 +66,9 @@ public class BusinessEsAutoConfig {
 				.setConnectionRequestTimeout(businessEsProperties.getConnectionRequestTimeOut()));
         return builder.build();
 	}
-	
+	/*
+	* es的操作API
+	* */
 	@Bean
 	public BusinessEsHandle businessEsHandle(@Qualifier("businessEsRestClient")RestClient businessEsRestClient, BusinessEsProperties businessEsProperties){
 		return new BusinessEsHandle(businessEsRestClient,businessEsProperties.getEsSwitch(),businessEsProperties.getEsTypeSwitch());
