@@ -443,19 +443,52 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
      * @param programPageListDto 查询节目数据的入参
      * @return 执行后的结果
      * */
+    //输入:areaid parentProgramCategoryId programCategoryId timeType startDateTime endDateTime type
     public PageVo<ProgramListVo> dbSelectPage(ProgramPageListDto programPageListDto) {
+        //programMapper.selectPage的返回结果表示第几页,一页有多少条,这里是连表查询
+        /*
+        * 输出:{
+        *   current: 2,
+        *   size: 10,
+        *   total: 156,
+        *   page: 16,
+        *   records: [
+        *       {
+        *           id , title , areaId , showTime, showDayTime, showWeekTime
+        *       },
+        *       {}
+        *   ]
+        * }
+        * 对应的sql
+        * SELECT dp.id, dp.area_id, dp.program_category_id, dp.parent_program_category_id,
+        dp.title, dp.actor, dp.place, dp.item_picture,
+        ds.show_time, ds.show_week_time, ds.show_day_time
+        FROM d_program dp
+        LEFT JOIN d_program_show_time ds ON dp.id = ds.program_id
+        WHERE dp.status = 1 AND ds.status = 1 AND dp.program_status = 1
+        AND dp.area_id = #{programPageListDto.areaId}
+        AND dp.program_category_id = #{programPageListDto.programCategoryId}
+        ORDER BY dp.high_heat DESC
+        LIMIT 10 OFFSET 10
+        * */
         IPage<ProgramJoinShowTime> iPage = 
                 programMapper.selectPage(PageUtil.getPageParams(programPageListDto), programPageListDto);
+        //如果查询的节目列表为空,则直接返回pageVo对象
         if (CollectionUtil.isEmpty(iPage.getRecords())) {
             return new PageVo<>(iPage.getCurrent(), iPage.getSize(), iPage.getTotal(), new ArrayList<>());
         }
+        //根据节目列表获得节目类型id列表
         Set<Long> programCategoryIdList = 
                 iPage.getRecords().stream().map(Program::getProgramCategoryId).collect(Collectors.toSet());
+        //根据节目id来查询节目类型列表Map , key: 节目类型 , value: 节目类型名
         Map<Long, String> programCategoryMap = selectProgramCategoryMap(programCategoryIdList);
-        
+
+        //节目id集合
         List<Long> programIdList = iPage.getRecords().stream().map(Program::getId).collect(Collectors.toList());
+
+        //根据节目id统计出票房的最低价和最高价的集合map , key:节目id , value: 票档
         Map<Long, TicketCategoryAggregate> ticketCategorieMap = selectTicketCategorieMap(programIdList);
-        
+        //查询区域
         Map<Long,String> tempAreaMap = new HashMap<>(64);
         AreaSelectDto areaSelectDto = new AreaSelectDto();
         areaSelectDto.setIdList(iPage.getRecords().stream().map(Program::getAreaId).distinct().collect(Collectors.toList()));
@@ -469,15 +502,18 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
             log.error("base-data selectByIdList rpc error areaResponse:{}", JSON.toJSONString(areaResponse));
         }
         Map<Long,String> areaMap = tempAreaMap;
-        
+        //将数据库实体ProgramJoinShowTime转换成前端VO对象ProgramListVo
         return PageUtil.convertPage(iPage, programJoinShowTime -> {
             ProgramListVo programListVo = new ProgramListVo();
             BeanUtil.copyProperties(programJoinShowTime, programListVo);
-            
+            //区域名字
             programListVo.setAreaName(areaMap.get(programJoinShowTime.getAreaId()));
+            //节目名字
             programListVo.setProgramCategoryName(programCategoryMap.get(programJoinShowTime.getProgramCategoryId()));
+            //最低价
             programListVo.setMinPrice(Optional.ofNullable(ticketCategorieMap.get(programJoinShowTime.getId()))
                     .map(TicketCategoryAggregate::getMinPrice).orElse(null));
+            //最高价
             programListVo.setMaxPrice(Optional.ofNullable(ticketCategorieMap.get(programJoinShowTime.getId()))
                     .map(TicketCategoryAggregate::getMaxPrice).orElse(null));
             return programListVo;
