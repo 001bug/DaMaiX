@@ -53,7 +53,7 @@ public class UserRegisterDto implements Serializable {
     
     @Schema(name ="idNumber", type ="String", description ="身份证号码")
     private String idNumber;
-    
+
     @Schema(name ="id", type ="captchaId", description ="captchaId 调用是否需要校验验证码接口返回",requiredMode= RequiredMode.REQUIRED)
     @NotBlank
     private String captchaId;

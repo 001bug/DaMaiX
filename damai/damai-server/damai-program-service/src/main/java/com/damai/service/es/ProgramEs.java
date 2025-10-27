@@ -59,7 +59,7 @@ public class ProgramEs {
             for (Long parentProgramCategoryId : programListDto.getParentProgramCategoryIds()) {
                 List<EsDataQueryDto> programEsQueryDto = new ArrayList<>();
                 if (Objects.nonNull(programListDto.getAreaId())) {
-                    //地区id
+                    //设置Es的查询参数，用户选择了地区筛选
                     EsDataQueryDto areaIdQueryDto = new EsDataQueryDto();
                     areaIdQueryDto.setParamName(ProgramDocumentParamName.AREA_ID);
                     areaIdQueryDto.setParamValue(programListDto.getAreaId());
@@ -226,29 +226,39 @@ public class ProgramEs {
     public PageVo<ProgramListVo> search(ProgramSearchDto programSearchDto) {
         PageVo<ProgramListVo> pageVo = new PageVo<>();
         try {
+            //创建最外层的 BoolQueryBuilder
             BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
+            //areaId条件查询
             if (Objects.nonNull(programSearchDto.getAreaId())) {
                 QueryBuilder builds = QueryBuilders.termQuery(ProgramDocumentParamName.AREA_ID, programSearchDto.getAreaId());
                 boolQuery.must(builds);
             }
+            //父节目类型id条件查询
             if (Objects.nonNull(programSearchDto.getParentProgramCategoryId())) {
                 QueryBuilder builds = QueryBuilders.termQuery(ProgramDocumentParamName.PARENT_PROGRAM_CATEGORY_ID, programSearchDto.getParentProgramCategoryId());
                 boolQuery.must(builds);
             }
+            //时间范围条件查询
             if (Objects.nonNull(programSearchDto.getStartDateTime()) &&
                     Objects.nonNull(programSearchDto.getEndDateTime())) {
                 QueryBuilder builds = QueryBuilders.rangeQuery(ProgramDocumentParamName.SHOW_DAY_TIME)
                         .from(programSearchDto.getStartDateTime()).to(programSearchDto.getEndDateTime()).includeLower(true);
                 boolQuery.must(builds);
             }
+            //输入内容条件查询
             if (StringUtil.isNotEmpty(programSearchDto.getContent())) {
+                // 创建内层的 BoolQueryBuilder 用于处理 title 或 actor 的 OR 查询
                 BoolQueryBuilder innerBoolQuery = QueryBuilders.boolQuery();
+                //按节目标题搜索
                 innerBoolQuery.should(QueryBuilders.matchQuery(ProgramDocumentParamName.TITLE, programSearchDto.getContent()));
+                //按艺人名字搜索
                 innerBoolQuery.should(QueryBuilders.matchQuery(ProgramDocumentParamName.ACTOR, programSearchDto.getContent()));
+                // 确保至少有一个 should 条件匹配
                 innerBoolQuery.minimumShouldMatch(1);
+                //将内层的 BoolQueryBuilder 添加到最外层的查询中
                 boolQuery.must(innerBoolQuery);
             }
-            
+            //使用 SearchSourceBuilder 构建最终的查询
             SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
             ProgramPageOrder programPageOrder = getProgramPageOrder(programSearchDto);
             if (Objects.nonNull(programPageOrder.sortParam) && Objects.nonNull(programPageOrder.sortOrder)) {

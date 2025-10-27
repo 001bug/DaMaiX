@@ -31,14 +31,16 @@ public class ProgramOrderV1Strategy extends AbstractApplicationCommandLineRunner
     @Autowired
     private CompositeContainer compositeContainer;
     
-    
+    /*
+     * 订单创建，使用节目id作为锁
+     */
     @RepeatExecuteLimit(
             name = RepeatExecuteLimitConstants.CREATE_PROGRAM_ORDER,
-            keys = {"#programOrderCreateDto.userId","#programOrderCreateDto.programId"})
-    @ServiceLock(name = PROGRAM_ORDER_CREATE_V1,keys = {"#programOrderCreateDto.programId"})
+            keys = {"#programOrderCreateDto.userId","#programOrderCreateDto.programId"})//这是幂等保护
+    @ServiceLock(name = PROGRAM_ORDER_CREATE_V1,keys = {"#programOrderCreateDto.programId"})//分布式锁
     @Override
     public String createOrder(final ProgramOrderCreateDto programOrderCreateDto) {
-        compositeContainer.execute(CompositeCheckType.PROGRAM_ORDER_CREATE_CHECK.getValue(),programOrderCreateDto);
+        compositeContainer.execute(CompositeCheckType.PROGRAM_ORDER_CREATE_CHECK.getValue(),programOrderCreateDto);//组合模式参数校验
         return programOrderService.create(programOrderCreateDto);
     }
     

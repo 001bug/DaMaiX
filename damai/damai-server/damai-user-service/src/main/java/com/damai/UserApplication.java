@@ -20,5 +20,4 @@ public class UserApplication {
         System.setProperty("nacos.logging.default.config.enabled","false");
         SpringApplication.run(UserApplication.class, args);
     }
-
 }

@@ -101,6 +101,7 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(final ServerWebExchange exchange, final GatewayFilterChain chain) {
+        //防刷限流
         if (rateLimiterProperty.getRateSwitch()) {
             try {
                 rateLimiter.acquire();
@@ -117,13 +118,19 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
     }
     
     public Mono<Void> doFilter(final ServerWebExchange exchange, final GatewayFilterChain chain){
+        //获得请求
         ServerHttpRequest request = exchange.getRequest();
+        //链路id
         String traceId = request.getHeaders().getFirst(TRACE_ID);
+        //灰度标识
         String gray = request.getHeaders().getFirst(GRAY_PARAMETER);
+        //是否验证参数
         String noVerify = request.getHeaders().getFirst(NO_VERIFY);
+        //如果链路id不存在,那么在这里生成
         if (StringUtil.isEmpty(traceId)) {
             traceId = String.valueOf(uidGenerator.getUid());
         }
+        //将链路id放到日志的MDC中便于日志输出
         MDC.put(TRACE_ID,traceId);
         Map<String,String> headMap = new HashMap<>(8);
         headMap.put(TRACE_ID,traceId);
@@ -131,8 +138,11 @@ public class RequestValidationFilter implements GlobalFilter, Ordered {
         if (StringUtil.isNotEmpty(noVerify)) {
             headMap.put(NO_VERIFY,noVerify);
         }
+        //将链路id放入Threadload中
         BaseParameterHolder.setParameter(TRACE_ID,traceId);
+        //将灰度标识放入Threadload中
         BaseParameterHolder.setParameter(GRAY_PARAMETER,gray);
+        //获得请求类型
         MediaType contentType = request.getHeaders().getContentType();
         //application json请求
         if (Objects.nonNull(contentType) && contentType.toString().toLowerCase().contains(MediaType.APPLICATION_JSON_VALUE.toLowerCase())) {

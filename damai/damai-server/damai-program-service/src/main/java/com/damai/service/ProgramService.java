@@ -471,13 +471,14 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
         ORDER BY dp.high_heat DESC
         LIMIT 10 OFFSET 10
         * */
+        //这里已经把该要的数据已经保存好了
         IPage<ProgramJoinShowTime> iPage = 
                 programMapper.selectPage(PageUtil.getPageParams(programPageListDto), programPageListDto);
         //如果查询的节目列表为空,则直接返回pageVo对象
         if (CollectionUtil.isEmpty(iPage.getRecords())) {
             return new PageVo<>(iPage.getCurrent(), iPage.getSize(), iPage.getTotal(), new ArrayList<>());
         }
-        //根据节目列表获得节目类型id列表
+        //根据节目列表获得节目类型id列表 **
         Set<Long> programCategoryIdList = 
                 iPage.getRecords().stream().map(Program::getProgramCategoryId).collect(Collectors.toSet());
         //根据节目id来查询节目类型列表Map , key: 节目类型 , value: 节目类型名
@@ -526,6 +527,7 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
      * @return 执行后的结果
      * */
     public ProgramVo detail(ProgramGetDto programGetDto) {
+        //组合模式检查参数
         compositeContainer.execute(CompositeCheckType.PROGRAM_DETAIL_CHECK.getValue(),programGetDto);
         return getDetail(programGetDto);
     }
@@ -556,20 +558,28 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
      * @return 执行后的结果
      * */
     public ProgramVo getDetail(ProgramGetDto programGetDto) {
+        //查询节目演出时间
         ProgramShowTime programShowTime = programShowTimeService.selectProgramShowTimeByProgramId(programGetDto.getId());
+
+        //从节目表获取数据,以及区域信息
         ProgramVo programVo = programService.getById(programGetDto.getId(),DateUtils.countBetweenSecond(DateUtils.now(),
                 programShowTime.getShowTime()), TimeUnit.SECONDS);
         programVo.setShowTime(programShowTime.getShowTime());
         programVo.setShowDayTime(programShowTime.getShowDayTime());
         programVo.setShowWeekTime(programShowTime.getShowWeekTime());
-        
+
+
+        //从节目分组表获取数据,进入数据库要加读锁
         ProgramGroupVo programGroupVo = programService.getProgramGroup(programVo.getProgramGroupId());
         programVo.setProgramGroupVo(programGroupVo);
-        
+
+        //异步预先加载用户购票人
         preloadTicketUserList(programVo.getHighHeat());
-        
+
+        //异步预先加载用户下节目订单数量
         preloadAccountOrderCount(programVo.getId());
-        
+
+        //设置节目类型相关信息
         ProgramCategory programCategory = getProgramCategory(programVo.getProgramCategoryId());
         if (Objects.nonNull(programCategory)) {
             programVo.setProgramCategoryName(programCategory.getName());
@@ -578,7 +588,8 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
         if (Objects.nonNull(parentProgramCategory)) {
             programVo.setParentProgramCategoryName(parentProgramCategory.getName());
         }
-        
+
+        //查询节目票档
         List<TicketCategoryVo> ticketCategoryVoList =
                 ticketCategoryService.selectTicketCategoryListByProgramId(programVo.getId(),
                         DateUtils.countBetweenSecond(DateUtils.now(),programShowTime.getShowTime()), TimeUnit.SECONDS);
@@ -836,21 +847,28 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
         
         return programVo;
     }
-    
+    /*
+    * 预先加载用户下的购票人
+    * */
     private void preloadTicketUserList(Integer highHeat){
+        //如果节目是热度不高的,那么不用预先加载
         if (Objects.equals(highHeat, BusinessStatus.NO.getCode())) {
             return;
         }
+
         String userId = BaseParameterHolder.getParameter(USER_ID);
         String code = BaseParameterHolder.getParameter(CODE);
+        //如果用户没有登录,也不用预先加载了
         if (StringUtil.isEmpty(userId) || StringUtil.isEmpty(code)) {
             return;
         }
         Boolean userLogin =
                 redisCache.hasKey(RedisKeyBuild.createRedisKey(RedisKeyManage.USER_LOGIN, code, userId));
+        //如果用户没用登录, 也不用预先加载了
         if (!userLogin) {
             return;
         }
+        //异步加载购票人信息, 别耽误查询节目详情的主线程
         BusinessThreadPool.execute(() -> {
             try {
                 if (!redisCache.hasKey(RedisKeyBuild.createRedisKey(RedisKeyManage.TICKET_USER_LIST,userId))) {
@@ -871,27 +889,32 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
             }
         });
     }
-    
+    //预先加载用户下的节目订单数量
     private void preloadAccountOrderCount(Long programId){
         String userId = BaseParameterHolder.getParameter(USER_ID);
         String code = BaseParameterHolder.getParameter(CODE);
         if (StringUtil.isEmpty(userId) || StringUtil.isEmpty(code)) {
             return;
         }
+        //判断是否登录
         Boolean userLogin =
                 redisCache.hasKey(RedisKeyBuild.createRedisKey(RedisKeyManage.USER_LOGIN, code, userId));
+        //如果没有登录直接返回
         if (!userLogin) {
             return;
         }
         BusinessThreadPool.execute(() -> {
             try {
+                //如果redis中不存在则调用订单服务查询该用户下此节目的订单数量(没支付,已支付状态)
                 if (!redisCache.hasKey(RedisKeyBuild.createRedisKey(RedisKeyManage.ACCOUNT_ORDER_COUNT,userId,programId))) {
                     AccountOrderCountDto accountOrderCountDto = new AccountOrderCountDto();
                     accountOrderCountDto.setUserId(Long.parseLong(userId));
                     accountOrderCountDto.setProgramId(programId);
+                    //调用订单服务(远程服务)查询数量
                     ApiResponse<AccountOrderCountVo> apiResponse = orderClient.accountOrderCount(accountOrderCountDto);
                     if (Objects.equals(apiResponse.getCode(), BaseCode.SUCCESS.getCode())) {
                         Optional.ofNullable(apiResponse.getData())
+                                //放入redis中
                                 .ifPresent(accountOrderCountVo -> redisCache.set(
                                         RedisKeyBuild.createRedisKey(RedisKeyManage.ACCOUNT_ORDER_COUNT,userId,programId),
                                         accountOrderCountVo.getCount(), tokenExpireManager.getTokenExpireTime() + 1,
@@ -910,7 +933,7 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
         return localCacheProgramCategory.get(String.valueOf(programCategoryId),
                 key -> getProgramCategory(programCategoryId));
     }
-    
+    /*获取节目类型信息*/
     public ProgramCategory getProgramCategory(Long programCategoryId){
         return programCategoryService.getProgramCategory(programCategoryId);
     }

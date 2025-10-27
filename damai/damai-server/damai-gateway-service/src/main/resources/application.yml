@@ -24,9 +24,10 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848
-        username: nacos
-        password: nacos
+        server-addr: 127.0.0.1:8848 #连接naocs服务
+        #ip: 127.0.0.1:8848 #告诉nacos我在127.0.0.1:8848上运行
+        #username: nacos
+        #password: nacos
         metadata:
           # true表示灰度服务/false表示生产服务(默认)
           gray: false

@@ -21,13 +21,19 @@ import java.util.List;
  **/
 @Service
 public class UserCaptchaService {
-    
+    /**
+     * 当每秒的注册请求达到阈值触发校验验证码的操作
+     */
     @Value("${verify_captcha_threshold:10}")
     private int verifyCaptchaThreshold;
-    
+    /**
+     * 校验验证码id的过期时间
+     */
     @Value("${verify_captcha_id_expire_time:60}")
     private int verifyCaptchaIdExpireTime;
-    
+    /**
+     * 始终进行校验验证码
+     */
     @Value("${always_verify_captcha:0}")
     private int alwaysVerifyCaptcha;
     
@@ -39,20 +45,31 @@ public class UserCaptchaService {
     
     @Autowired
     private CheckNeedCaptchaOperate checkNeedCaptchaOperate;
-    
+    //统计规定时间内,请求数是否达到阈值,达到则需要验证码
     public CheckNeedCaptchaDataVo checkNeedCaptcha() {
+        //当前时间戳
         long currentTimeMillis = System.currentTimeMillis();
+        //验证码唯一标识id
         long id = uidGenerator.getUid();
         List<String> keys = new ArrayList<>();
+        //计数器的键
         keys.add(RedisKeyBuild.createRedisKey(RedisKeyManage.COUNTER_COUNT).getRelKey());
+        //计数器的时间戳的键
         keys.add(RedisKeyBuild.createRedisKey(RedisKeyManage.COUNTER_TIMESTAMP).getRelKey());
+        //校验验证码唯一标识id的键
         keys.add(RedisKeyBuild.createRedisKey(RedisKeyManage.VERIFY_CAPTCHA_ID,id).getRelKey());
         String[] data = new String[4];
+        //每秒的注册请求的阈值
         data[0] = String.valueOf(verifyCaptchaThreshold);
+        //时间戳
         data[1] = String.valueOf(currentTimeMillis);
+        //校验验证码id的过期时间
         data[2] = String.valueOf(verifyCaptchaIdExpireTime);
+        //设置是否需要验证码
         data[3] = String.valueOf(alwaysVerifyCaptcha);
+        //执行计数器计算*
         Boolean result = checkNeedCaptchaOperate.checkNeedCaptchaOperate(keys, data);
+        //将结果返回
         CheckNeedCaptchaDataVo checkNeedCaptchaDataVo = new CheckNeedCaptchaDataVo();
         checkNeedCaptchaDataVo.setCaptchaId(id);
         checkNeedCaptchaDataVo.setVerifyCaptcha(result);

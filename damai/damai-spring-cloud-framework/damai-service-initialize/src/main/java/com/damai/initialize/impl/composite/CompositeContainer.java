@@ -13,26 +13,32 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 /**
- * @program: 极度真实还原大麦网高并发实战项目。 添加 阿星不是程序员 微信，添加时备注 大麦 来获取项目的完整资料 
+ * @program: 极度真实还原大麦网高并发实战项目。
  * @description: 组合模式容器
- * @author: 阿星不是程序员
+ * @author: ohmygoda
  **/
+//树的构建,这个树是用来处理参数验证逻辑的顺序的
 public class CompositeContainer<T> {
     
     private final Map<String, AbstractComposite> allCompositeInterfaceMap = new HashMap<>();
     
     public void init(ConfigurableApplicationContext applicationEvent){
+        //获取所有AbstractComposite类型的bean
         Map<String, AbstractComposite> compositeInterfaceMap = applicationEvent.getBeansOfType(AbstractComposite.class);
-        
+        //查出AbstractComposite类型, 然后根据type进行分组
         Map<String, List<AbstractComposite>> collect = compositeInterfaceMap.values().stream().collect(Collectors.groupingBy(AbstractComposite::type));
         collect.forEach((k,v) -> {
+            //构建组件树结构
             AbstractComposite root = build(v);
+            //如果根节点存在,则执行业务逻辑
             if (Objects.nonNull(root)) {
                 allCompositeInterfaceMap.put(k, root);
             }
         });
     }
-    
+    /*
+     *执行树中的节点 
+     */
     public void execute(String type,T param){
         AbstractComposite compositeInterface = Optional.ofNullable(allCompositeInterfaceMap.get(type))
                 .orElseThrow(() -> new DaMaiFrameException(BaseCode.COMPOSITE_NOT_EXIST));
@@ -49,6 +55,7 @@ public class CompositeContainer<T> {
         Map<Integer, AbstractComposite> nextLevelComponents = groupedByTier.get(currentTier + 1);
         
         if (currentLevelComponents == null) {
+            //当前层级没有组件时,直接返回
             return;
         }
         
@@ -56,14 +63,17 @@ public class CompositeContainer<T> {
             for (AbstractComposite child : nextLevelComponents.values()) {
                 Integer parentOrder = child.executeParentOrder();
                 if (parentOrder == null || parentOrder == 0) {
+                    // 跳过根节点
                     continue;
                 }
                 AbstractComposite parent = currentLevelComponents.get(parentOrder);
                 if (parent != null) {
+                    //将子节点添加到父节点的子列表中
                     parent.add(child);
                 }
             }
         }
+        //递归构建下一层级的树结构
         buildTree(groupedByTier, currentTier + 1);
     }
     
@@ -73,20 +83,25 @@ public class CompositeContainer<T> {
      * @return 根节点。
      */
     private static AbstractComposite build(Collection<AbstractComposite> components) {
+        //按层级和执行顺序组织组件
         Map<Integer, Map<Integer, AbstractComposite>> groupedByTier = new TreeMap<>();
         
         for (AbstractComposite component : components) {
+            //如果component.executeTier的这个键不存在,那么以component.executeTier这个为键,第二个参数为值
             groupedByTier.computeIfAbsent(component.executeTier(), k -> new HashMap<>(16))
                     .put(component.executeOrder(), component);
         }
-        
+        //找到最小层级
         Integer minTier = groupedByTier.keySet().stream().min(Integer::compare).orElse(null);
         if (minTier == null) {
+            //没有组件时返回空
             return null;
         }
         
+        //构建组件树
         buildTree(groupedByTier, minTier);
         
+        //找到并返回根节点
         return groupedByTier.get(minTier).values().stream()
                 .filter(c -> c.executeParentOrder() == null || c.executeParentOrder() == 0)
                 .findFirst()

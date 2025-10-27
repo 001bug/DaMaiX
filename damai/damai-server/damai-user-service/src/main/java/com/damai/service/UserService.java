@@ -107,9 +107,11 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     
     private static final Integer ERROR_COUNT_THRESHOLD = 5;
     
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class)//开启事务,添加用户
+    //加分布式锁,防止并发问题
     @ServiceLock(lockType= LockType.Write,name = REGISTER_USER_LOCK,keys = {"#userRegisterDto.mobile"})
     public Boolean register(UserRegisterDto userRegisterDto) {
+        //执行验证逻辑
         compositeContainer.execute(CompositeCheckType.USER_REGISTER_CHECK.getValue(),userRegisterDto);
         log.info("注册手机号:{}",userRegisterDto.getMobile());
         //用户表添加
@@ -172,6 +174,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
                     .eq(UserMobile::getMobile, mobile);
             UserMobile userMobile = userMobileMapper.selectOne(queryWrapper);
             if (Objects.isNull(userMobile)) {
+                //如果查询手机号不存在，则放入redis中将手机号输入错误的计数器加1
                 redisCache.incrBy(RedisKeyBuild.createRedisKey(RedisKeyManage.LOGIN_USER_MOBILE_ERROR,mobile),1);
                 redisCache.expire(RedisKeyBuild.createRedisKey(RedisKeyManage.LOGIN_USER_MOBILE_ERROR,mobile),1,TimeUnit.MINUTES);
                 throw new DaMaiFrameException(BaseCode.USER_MOBILE_EMPTY);

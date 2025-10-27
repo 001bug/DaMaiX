@@ -99,21 +99,28 @@ public class ProgramShowTimeService extends ServiceImpl<ProgramShowTimeMapper, P
         return redisCache.get(RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM_SHOW_TIME,
                 programId), ProgramShowTime.class);
     }
-    
+//    查询演出时间,双重检测锁
+    /*
+    * 假设1000个并发请求同时查询programId=1001
+    * */
     @ServiceLock(lockType= LockType.Read,name = PROGRAM_SHOW_TIME_LOCK,keys = {"#programId"})
     public ProgramShowTime selectProgramShowTimeByProgramId(Long programId){
+        //从redis的缓存中查找
         ProgramShowTime programShowTime = redisCache.get(RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM_SHOW_TIME, 
                 programId), ProgramShowTime.class);
         if (Objects.nonNull(programShowTime)) {
             return programShowTime;
         }
+        //没命中缓存,然后开始从数据库中查找,获取分布式锁对象,LockType.Reentrant表示可重入锁. 防止并发查询数据库(读锁)
         RLock lock = serviceLockTool.getLock(LockType.Reentrant, GET_PROGRAM_SHOW_TIME_LOCK, 
                 new String[]{String.valueOf(programId)});
         lock.lock();
         try {
+            //双重检查,再从redis查询,锁只是变的串行,并没有解决重复查询的问题
             programShowTime = redisCache.get(RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM_SHOW_TIME,
                     programId), ProgramShowTime.class);
             if (Objects.isNull(programShowTime)) {
+                //从数据库中找到并写入缓存中
                 LambdaQueryWrapper<ProgramShowTime> programShowTimeLambdaQueryWrapper =
                         Wrappers.lambdaQuery(ProgramShowTime.class).eq(ProgramShowTime::getProgramId, programId);
                 programShowTime = Optional.ofNullable(programShowTimeMapper.selectOne(programShowTimeLambdaQueryWrapper))
@@ -123,6 +130,7 @@ public class ProgramShowTimeService extends ServiceImpl<ProgramShowTimeMapper, P
             }
             return programShowTime;
         }finally {
+            //释放锁
             lock.unlock();   
         }
     }

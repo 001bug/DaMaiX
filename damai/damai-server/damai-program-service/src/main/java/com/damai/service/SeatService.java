@@ -101,20 +101,24 @@ public class SeatService extends ServiceImpl<SeatMapper, Seat> {
     
     @ServiceLock(lockType= LockType.Read,name = SEAT_LOCK,keys = {"#programId","#ticketCategoryId"})
     public List<SeatVo> selectSeatResolution(Long programId,Long ticketCategoryId,Long expireTime,TimeUnit timeUnit) {
+        //从缓存中查询所有状态的座位
         List<SeatVo> seatVoList = getSeatVoListByCacheResolution(programId,ticketCategoryId);
         if (CollectionUtil.isNotEmpty(seatVoList)) {
             return seatVoList;
         }
+        //如果redis中三种状态的座位都没有,说明根本没有往redis存放过
         RLock lock = serviceLockTool.getLock(LockType.Reentrant, GET_SEAT_LOCK, new String[]{String.valueOf(programId),
                 String.valueOf(ticketCategoryId)});
         lock.lock();
         try {
+            //再从缓存中查询座位数据
             seatVoList = getSeatVoListByCacheResolution(programId,ticketCategoryId);
             if (CollectionUtil.isNotEmpty(seatVoList)) {
                 return seatVoList;
             }
+            //从数据库中查找. 构建一个查询条件
             LambdaQueryWrapper<Seat> seatLambdaQueryWrapper =
-                    Wrappers.lambdaQuery(Seat.class).eq(Seat::getProgramId, programId)
+                    Wrappers.lambdaQuery(Seat.class).eq(Seat::getProgramId, programId)//Seat::getProgramId是方法引用,并且是链式调用
                             .eq(Seat::getTicketCategoryId,ticketCategoryId);
             List<Seat> seats = seatMapper.selectList(seatLambdaQueryWrapper);
             for (Seat seat : seats) {
@@ -123,11 +127,16 @@ public class SeatService extends ServiceImpl<SeatMapper, Seat> {
                 seatVo.setSeatTypeName(SeatType.getMsg(seat.getSeatType()));
                 seatVoList.add(seatVo);
             }
+            //将作为按照状态进行分类. Collectors收集器
             Map<Integer, List<SeatVo>> seatMap = seatVoList.stream().collect(Collectors.groupingBy(SeatVo::getSellStatus));
+            //没有售卖的座位
             List<SeatVo> noSoldSeatVoList = seatMap.get(SellStatus.NO_SOLD.getCode());
+            //正在锁定的座位
             List<SeatVo> lockSeatVoList = seatMap.get(SellStatus.LOCK.getCode());
+            //已经售卖的座位
             List<SeatVo> soldSeatVoList = seatMap.get(SellStatus.SOLD.getCode());
             if (CollectionUtil.isNotEmpty(noSoldSeatVoList)) {
+                //将没有售卖的座位放入redis中,以字符串id为key,数据本身为value,遇到重复的覆盖
                 redisCache.putHash(RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM_SEAT_NO_SOLD_RESOLUTION_HASH, 
                                 programId,ticketCategoryId),noSoldSeatVoList.stream()
                                 .collect(Collectors.toMap(s -> String.valueOf(s.getId()),s -> s,(v1,v2) -> v2))
@@ -164,37 +173,47 @@ public class SeatService extends ServiceImpl<SeatMapper, Seat> {
                 programId, ticketCategoryId).getRelKey());
         return programSeatCacheData.getData(keys, new String[]{});
     }
-    
+    //从redis中查找节目座位信息
     public SeatRelateInfoVo relateInfo(SeatListDto seatListDto) {
         SeatRelateInfoVo seatRelateInfoVo = new SeatRelateInfoVo();
+        //从redis中查询节目
         ProgramVo programVo = 
                 redisCache.get(RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM,seatListDto.getProgramId()),ProgramVo.class);
+        //查询成功,直接返回
         if (Objects.isNull(programVo)){
             ProgramGetDto programGetDto = new ProgramGetDto();
             programGetDto.setId(seatListDto.getProgramId());
             programVo = programService.detail(programGetDto);
         }
+        //查询演出时间
         ProgramShowTime programShowTime = programShowTimeService.selectProgramShowTimeByProgramId(seatListDto.getProgramId());
         List<TicketCategoryVo> ticketCategoryVoList = ticketCategoryService
                 .selectTicketCategoryListByProgramIdMultipleCache(programVo.getId(),programShowTime.getShowTime());
         
         List<SeatVo> seatVos = new ArrayList<>();
+        //遍历票档集合
         for (TicketCategoryVo ticketCategoryVo : ticketCategoryVoList) {
+            //根据节目id和票档id来查询出座位集合,汇总到seatVos中
             seatVos.addAll(selectSeatResolution(seatListDto.getProgramId(),ticketCategoryVo.getId(),
                     DateUtils.countBetweenSecond(DateUtils.now(), programShowTime.getShowTime()), TimeUnit.SECONDS));
         }
-        
+        //如果节目不允许选座位,直接抛出异常
         if (programVo.getPermitChooseSeat().equals(BusinessStatus.NO.getCode())) {
             throw new DaMaiFrameException(BaseCode.PROGRAM_NOT_ALLOW_CHOOSE_SEAT);
         }
         
         Map<String, List<SeatVo>> seatVoMap =
                 seatVos.stream().collect(Collectors.groupingBy(seatVo -> seatVo.getPrice().toString()));
+        //节目id
         seatRelateInfoVo.setProgramId(programVo.getId());
+        //节目地点
         seatRelateInfoVo.setPlace(programVo.getPlace());
+        //节目演出时间
         seatRelateInfoVo.setShowTime(programShowTime.getShowTime());
         seatRelateInfoVo.setShowWeekTime(programShowTime.getShowWeekTime());
+        //价格列表
         seatRelateInfoVo.setPriceList(seatVoMap.keySet().stream().sorted().collect(Collectors.toList()));
+        //节目的座位列表
         seatRelateInfoVo.setSeatVoMap(seatVoMap);
         return seatRelateInfoVo;
     }

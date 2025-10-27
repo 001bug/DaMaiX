@@ -12,7 +12,7 @@ import org.springframework.context.ConfigurableApplicationContext;
  **/
 @AllArgsConstructor
 public class CompositeInit extends AbstractApplicationStartEventListenerHandler {
-    
+    //几个基本的初始化方式,CommandLineRunner,InitializingBean
     private final CompositeContainer compositeContainer;
     
     @Override

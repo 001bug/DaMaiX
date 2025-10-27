@@ -22,9 +22,12 @@ public class RequestCounter {
     
     public synchronized boolean onRequest() {
         long currentTime = System.currentTimeMillis();
+        //如果当前时间和上次重置时间差超过1s
         long differenceValue = 1000;
         if (currentTime - lastResetTime.get() >= differenceValue) {
+            //重置计数器
             count.set(0);
+            //更新重置时间
             lastResetTime.set(currentTime);
         }
         

@@ -24,6 +24,7 @@ import static com.damai.constant.Constant.USER_ID;
  * @author: 阿星不是程序员
  **/
 @Slf4j
+//继承了Spring提供的一个抽象类, 用来确保一个Http请求只被过滤一次. 底层是实现了filter接口
 public class BaseParameterFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(final HttpServletRequest request, final HttpServletResponse response, final FilterChain filterChain) throws ServletException, IOException {
@@ -32,11 +33,14 @@ public class BaseParameterFilter extends OncePerRequestFilter {
         if (StringUtil.isNotEmpty(requestBody)) {
             requestBody = requestBody.replaceAll(" ", "").replaceAll("\r\n","");
         }
+        //获取链路id
         String traceId = request.getHeader(TRACE_ID);
+        //返回请求头中名为 gray 的值,这个值跟灰度发布有关
         String gray = request.getHeader(GRAY_PARAMETER);
+        //获取用户id
         String userId = request.getHeader(USER_ID);
         String code = request.getHeader(CODE);
-        
+
         try {
             if (StringUtil.isNotEmpty(traceId)) {
                     BaseParameterHolder.setParameter(TRACE_ID,traceId);

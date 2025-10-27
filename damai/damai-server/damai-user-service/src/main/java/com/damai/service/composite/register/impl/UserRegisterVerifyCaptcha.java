@@ -30,9 +30,12 @@ public class UserRegisterVerifyCaptcha extends AbstractUserRegisterCheckHandler 
     
     @Autowired
     private RedisCache redisCache;
-    
+    /**
+     * 验证验证码是否正确
+     * */
     @Override
     protected void execute(UserRegisterDto param) {
+        //验证密码
         String password = param.getPassword();
         String confirmPassword = param.getConfirmPassword();
         if (!password.equals(confirmPassword)) {
@@ -49,6 +52,7 @@ public class UserRegisterVerifyCaptcha extends AbstractUserRegisterCheckHandler 
             log.info("传入的captchaVerification:{}",param.getCaptchaVerification());
             CaptchaVO captchaVO = new CaptchaVO();
             captchaVO.setCaptchaVerification(param.getCaptchaVerification());
+            //验证图形验证码
             ResponseModel responseModel = captchaHandle.verification(captchaVO);
             if (!responseModel.isSuccess()) {
                 throw new DaMaiFrameException(responseModel.getRepCode(),responseModel.getRepMsg());

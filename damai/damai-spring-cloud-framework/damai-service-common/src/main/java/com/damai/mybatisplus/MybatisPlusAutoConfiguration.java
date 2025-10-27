@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Bean;
 public class MybatisPlusAutoConfiguration {
     
     /**
-     * 必须字段自动填充
+     * 必须字段自动填充,例如创建时间，编辑时间.比如BaseDataTable中的createTime,editTime会自动填充
      * */
     @Bean
     public MetaObjectHandler metaObjectHandler(){
@@ -22,6 +22,9 @@ public class MybatisPlusAutoConfiguration {
     
     /**
      * 分页插件
+     * 注册 MyBatis-Plus 的 分页拦截器，
+     * 让你在写 SQL 查询时，只要调用 .page() 方法，
+     * MyBatis-Plus 自动帮你拼接 LIMIT、OFFSET 等分页语句。
      */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {

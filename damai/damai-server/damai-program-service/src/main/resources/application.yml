@@ -43,8 +43,9 @@ spring:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
-        username: nacos
-        password: nacos
+
+        #username: nacos
+        #password: nacos
       eager: true
   kafka:
     bootstrap-servers: 127.0.0.1:9092
@@ -103,7 +104,7 @@ jasypt:
 elasticsearch:
   ip: 127.0.0.1:9200
   userName: elastic
-  passWord: elastic
+  passWord: abc123
 delay:
   queue:
     corePoolSize: 1

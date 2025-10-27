@@ -469,11 +469,15 @@ public class BusinessEsHandle {
         sourceBuilder.query(boolQuery);
         return sourceBuilder;
     }
-    
+    /**
+     * 执行查询
+     * */
     public <T> void executeQuery(String indexName, String indexType,List<T> list,PageInfo<T> pageInfo,Class<T> clazz, 
                                  SearchSourceBuilder sourceBuilder,List<String> highLightFieldNameList) throws IOException {
         String string = sourceBuilder.toString();
+        //设置请求头的操作类型,为json,将查询DSL字符串封装成HTTP请求.
         HttpEntity entity = new NStringEntity(string, ContentType.APPLICATION_JSON);
+        //构建请求URL: /索引名/_search等等
         StringBuilder endpointStringBuilder = new StringBuilder("/" + indexName);
         if (esTypeSwitch) {
             endpointStringBuilder.append("/").append(indexType).append("/_search");
@@ -485,11 +489,13 @@ public class BusinessEsHandle {
         Request request = new Request("POST",endpoint);
         request.setEntity(entity);
         request.addParameters(Collections.emptyMap());
+        //执行请求
         Response response = restClient.performRequest(request);
         String result = EntityUtils.toString(response.getEntity());
         if (StringUtil.isEmpty(result)) {
             return;
         }
+        //解析结果
         JSONObject resultJsonObject =  JSONObject.parseObject(result);
         if (Objects.isNull(resultJsonObject)) {
             return;
@@ -498,6 +504,7 @@ public class BusinessEsHandle {
         if (Objects.isNull(hits)) {
             return;
         }
+        //总条数
         Long value = null;
         if (esTypeSwitch) {
             value = hits.getLong("total");
@@ -510,6 +517,7 @@ public class BusinessEsHandle {
         if (Objects.nonNull(pageInfo) && Objects.nonNull(value)) {
             pageInfo.setTotal(value);
         }
+        //解析数据
         JSONArray arrayData = hits.getJSONArray("hits");
         if (Objects.isNull(arrayData) || arrayData.isEmpty()) {
             return;
@@ -526,6 +534,7 @@ public class BusinessEsHandle {
                 Long sort = jsonArray.getLong(0);
                 jsonObject.put("sort",sort);
             }
+            //高亮显示字段
             JSONObject highlight = data.getJSONObject("highlight");
             if (Objects.nonNull(highlight) && Objects.nonNull(highLightFieldNameList)) {
                 for (String highLightFieldName : highLightFieldNameList) {
@@ -537,9 +546,9 @@ public class BusinessEsHandle {
                 }
             }
             if (StringUtil.isNotEmpty(esId)) {
-                jsonObject.put("esId",esId);
+                jsonObject.put("esId",esId);//添加ES文档ID
             }
-            list.add(JSONObject.parseObject(jsonObject.toJSONString(),clazz));
+            list.add(JSONObject.parseObject(jsonObject.toJSONString(),clazz));//转换为指定类型
         }
     }
     

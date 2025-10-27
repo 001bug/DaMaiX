@@ -20,6 +20,7 @@ import static com.damai.service.constant.OrderConstant.DELAY_ORDER_CANCEL_TOPIC;
  **/
 @Slf4j
 @Component
+//消费取消订单的信息.
 public class DelayOrderCancelConsumer implements ConsumerTask {
     
     @Autowired

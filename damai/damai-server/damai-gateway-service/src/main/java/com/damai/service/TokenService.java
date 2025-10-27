@@ -36,8 +36,10 @@ public class TokenService {
     
     public UserVo getUser(String token,String code,String tokenSecret){
         UserVo userVo = null;
+        //根据token解析获得userId
         String userId = parseToken(token,tokenSecret);
         if (StringUtil.isNotEmpty(userId)) {
+            //从缓存中获取登录用户信息
             userVo = redisCache.get(RedisKeyBuild.createRedisKey(RedisKeyManage.USER_LOGIN, code, userId), UserVo.class);
         }
         return Optional.ofNullable(userVo).orElseThrow(() -> new DaMaiFrameException(BaseCode.LOGIN_USER_NOT_EXIST));

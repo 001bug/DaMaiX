@@ -29,7 +29,7 @@ public class CustomizeRequestWrapper extends HttpServletRequestWrapper {
     
     @Override
     public ServletInputStream getInputStream() {
-        ByteArrayInputStream byteArrayInputStream = 
+        ByteArrayInputStream byteArrayInputStream =
                 new ByteArrayInputStream(requestBody.getBytes(StandardCharsets.UTF_8));
         return new ServletInputStream() {
             @Override
@@ -49,7 +49,7 @@ public class CustomizeRequestWrapper extends HttpServletRequestWrapper {
             
             @Override
             public void setReadListener(ReadListener listener) {
-                
+
             }
         };
     }

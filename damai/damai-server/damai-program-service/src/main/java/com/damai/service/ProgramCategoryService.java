@@ -89,10 +89,12 @@ public class ProgramCategoryService extends ServiceImpl<ProgramCategoryMapper, P
         }
         
     }
-    
+    //获取分类信息
     public ProgramCategory getProgramCategory(Long programCategoryId){
+        //从redis中查询
         ProgramCategory programCategory = redisCache.getForHash(RedisKeyBuild.createRedisKey(
                 RedisKeyManage.PROGRAM_CATEGORY_HASH), String.valueOf(programCategoryId), ProgramCategory.class);
+        //如果redis中不存在,从数据库中查询
         if (Objects.isNull(programCategory)) {
             Map<String, ProgramCategory> programCategoryMap = programCategoryRedisDataInit();
             return programCategoryMap.get(String.valueOf(programCategoryId));
@@ -103,11 +105,15 @@ public class ProgramCategoryService extends ServiceImpl<ProgramCategoryMapper, P
     @ServiceLock(lockType= LockType.Write,name = PROGRAM_CATEGORY_LOCK,keys = {"#all"})
     public Map<String, ProgramCategory> programCategoryRedisDataInit(){
         Map<String, ProgramCategory> programCategoryMap = new HashMap<>(64);
+        //对program_category表进行全表查询
         QueryWrapper<ProgramCategory> lambdaQueryWrapper = Wrappers.emptyWrapper();
+        //从数据库中查询
         List<ProgramCategory> programCategoryList = programCategoryMapper.selectList(lambdaQueryWrapper);
         if (CollectionUtil.isNotEmpty(programCategoryList)) {
+            //放入redis中
             programCategoryMap = programCategoryList.stream().collect(
                     Collectors.toMap(p -> String.valueOf(p.getId()), p -> p, (v1, v2) -> v2));
+            //查出的数据放入redis中
             redisCache.putHash(RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM_CATEGORY_HASH),programCategoryMap);
         }
         return programCategoryMap;

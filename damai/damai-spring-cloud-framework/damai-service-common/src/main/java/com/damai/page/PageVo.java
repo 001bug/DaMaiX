@@ -34,14 +34,29 @@ import java.util.List;
 @AllArgsConstructor
 public class PageVo<T> implements Serializable {
 
-    @Serial
     private static final long serialVersionUID = 1L;
-    
+
+    /**
+     * 页码
+     */
+   // @ApiModelProperty(name ="pageNum", dataType ="String", value ="页码")
     private long pageNum;
-    
+
+    /**
+     * 页大小
+     */
+    //@ApiModelProperty(name ="pageSize", dataType ="String", value ="页大小")
     private long pageSize;
-    
+
+    /**
+     * 记录总数
+     */
+    //@ApiModelProperty(name ="totalSize", dataType ="String", value ="记录总数")
     private long totalSize;
-    
+
+    /**
+     * 数据
+     */
+    //@ApiModelProperty(name ="list", dataType ="List", value ="数据")
     private List<T> list;
 }
