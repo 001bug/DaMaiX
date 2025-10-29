@@ -825,8 +825,10 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
     }
     
     public ProgramVo getDetailFromDb(Long programId) {
+        //从数据库查询节目数据
         ProgramVo programVo = createProgramVo(programId);
-        
+
+        //设置节目类型相关信息
         ProgramCategory programCategory = getProgramCategory(programVo.getProgramCategoryId());
         if (Objects.nonNull(programCategory)) {
             programVo.setProgramCategoryName(programCategory.getName());

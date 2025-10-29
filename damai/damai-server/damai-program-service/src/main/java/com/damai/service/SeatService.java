@@ -116,7 +116,7 @@ public class SeatService extends ServiceImpl<SeatMapper, Seat> {
             if (CollectionUtil.isNotEmpty(seatVoList)) {
                 return seatVoList;
             }
-            //从数据库中查找. 构建一个查询条件
+            //如果缓存中还是没有，则从数据库中查询
             LambdaQueryWrapper<Seat> seatLambdaQueryWrapper =
                     Wrappers.lambdaQuery(Seat.class).eq(Seat::getProgramId, programId)//Seat::getProgramId是方法引用,并且是链式调用
                             .eq(Seat::getTicketCategoryId,ticketCategoryId);
@@ -143,18 +143,21 @@ public class SeatService extends ServiceImpl<SeatMapper, Seat> {
                         ,expireTime, timeUnit);
             }
             if (CollectionUtil.isNotEmpty(lockSeatVoList)) {
+                //将没有售卖的座位放入redis中
                 redisCache.putHash(RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM_SEAT_LOCK_RESOLUTION_HASH, 
                                 programId,ticketCategoryId),lockSeatVoList.stream()
                                 .collect(Collectors.toMap(s -> String.valueOf(s.getId()),s -> s,(v1,v2) -> v2))
                         ,expireTime, timeUnit);
             }
             if (CollectionUtil.isNotEmpty(soldSeatVoList)) {
+                //将已经售卖的座位放入redis中
                 redisCache.putHash(RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM_SEAT_SOLD_RESOLUTION_HASH, 
                                 programId,ticketCategoryId)
                         ,soldSeatVoList.stream()
                                 .collect(Collectors.toMap(s -> String.valueOf(s.getId()),s -> s,(v1,v2) -> v2))
                         ,expireTime, timeUnit);
             }
+            //将座位集合，先按座位行号排序，再接着按座位列号排序
             seatVoList = seatVoList.stream().sorted(Comparator.comparingInt(SeatVo::getRowCode)
                     .thenComparingInt(SeatVo::getColCode)).collect(Collectors.toList());
             return seatVoList;
@@ -179,7 +182,7 @@ public class SeatService extends ServiceImpl<SeatMapper, Seat> {
         //从redis中查询节目
         ProgramVo programVo = 
                 redisCache.get(RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM,seatListDto.getProgramId()),ProgramVo.class);
-        //查询成功,直接返回
+        //如果查询不到，则去数据库中查询，再放入redis中
         if (Objects.isNull(programVo)){
             ProgramGetDto programGetDto = new ProgramGetDto();
             programGetDto.setId(seatListDto.getProgramId());
@@ -187,13 +190,14 @@ public class SeatService extends ServiceImpl<SeatMapper, Seat> {
         }
         //查询演出时间
         ProgramShowTime programShowTime = programShowTimeService.selectProgramShowTimeByProgramId(seatListDto.getProgramId());
+        //查询该节目下的票档集合
         List<TicketCategoryVo> ticketCategoryVoList = ticketCategoryService
                 .selectTicketCategoryListByProgramIdMultipleCache(programVo.getId(),programShowTime.getShowTime());
         
         List<SeatVo> seatVos = new ArrayList<>();
         //遍历票档集合
         for (TicketCategoryVo ticketCategoryVo : ticketCategoryVoList) {
-            //根据节目id和票档id来查询出座位集合,汇总到seatVos中
+            //根据节目id和票档id来查询出座位集合，汇总到seatVos中
             seatVos.addAll(selectSeatResolution(seatListDto.getProgramId(),ticketCategoryVo.getId(),
                     DateUtils.countBetweenSecond(DateUtils.now(), programShowTime.getShowTime()), TimeUnit.SECONDS));
         }

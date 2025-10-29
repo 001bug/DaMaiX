@@ -32,13 +32,17 @@ public class BaseProgramOrder {
         List<SeatDto> seatDtoList = programOrderCreateDto.getSeatDtoList();
         List<Long> ticketCategoryIdList = new ArrayList<>();
         if (CollectionUtil.isNotEmpty(seatDtoList)) {
+            //按照票档id进行排序，这样为了避免不同请求获取票档的顺序不同加锁而可能产生的死锁问题
             ticketCategoryIdList =
                     seatDtoList.stream().map(SeatDto::getTicketCategoryId).distinct().collect(Collectors.toList());
         }else {
             ticketCategoryIdList.add(programOrderCreateDto.getTicketCategoryId());
         }
+        //本地锁集合
         List<ReentrantLock> localLockList = new ArrayList<>(ticketCategoryIdList.size());
+        //加锁成功的本地锁集
         List<ReentrantLock> localLockSuccessList = new ArrayList<>(ticketCategoryIdList.size());
+        //根据统计出的票档id获得本地锁集合
         for (Long ticketCategoryId : ticketCategoryIdList) {
             String lockKey = StrUtil.join("-",lockKeyPrefix,
                     programOrderCreateDto.getProgramId(),ticketCategoryId);

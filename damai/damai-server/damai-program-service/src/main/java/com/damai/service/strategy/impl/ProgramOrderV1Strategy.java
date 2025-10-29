@@ -40,6 +40,7 @@ public class ProgramOrderV1Strategy extends AbstractApplicationCommandLineRunner
     @ServiceLock(name = PROGRAM_ORDER_CREATE_V1,keys = {"#programOrderCreateDto.programId"})//分布式锁
     @Override
     public String createOrder(final ProgramOrderCreateDto programOrderCreateDto) {
+        //进行业务验证
         compositeContainer.execute(CompositeCheckType.PROGRAM_ORDER_CREATE_CHECK.getValue(),programOrderCreateDto);//组合模式参数校验
         return programOrderService.create(programOrderCreateDto);
     }

@@ -61,6 +61,7 @@ public class ProgramElasticsearchInitData extends AbstractApplicationPostConstru
         Map<Long, TicketCategoryAggregate> ticketCategorieMap = programService.selectTicketCategorieMap(allProgramIdList);
         // 逐个节目转换并写入ES中
         for (Long programId : allProgramIdList) {
+            //从数据库中查出详细的节目信息
             ProgramVo programVo = programService.getDetailFromDb(programId);
             //构建ES文档数据
             Map<String,Object> map = new HashMap<>(32);
