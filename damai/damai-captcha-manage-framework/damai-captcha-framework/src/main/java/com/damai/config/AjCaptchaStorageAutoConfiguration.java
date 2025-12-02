@@ -19,7 +19,7 @@ public class AjCaptchaStorageAutoConfiguration {
     @Bean(name = "AjCaptchaCacheService")
     @ConditionalOnMissingBean
     public CaptchaCacheService captchaCacheService(AjCaptchaProperties config){
-        //缓存类型redis/local/....
+        //缓存类型redis/local/...., 通过配置找到工厂类型
         return CaptchaServiceFactory.getCache(config.getCacheType().name());
     }
 }

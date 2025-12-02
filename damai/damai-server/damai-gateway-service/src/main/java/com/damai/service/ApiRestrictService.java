@@ -73,6 +73,7 @@ public class ApiRestrictService {
     }
     
     public void apiRestrict(String id, String url, ServerHttpRequest request) {
+        //请求的路径在配置范围内的话
         if (checkApiRestrict(url)) {
             long triggerResult = 0L;
             long triggerCallStat = 0L;
@@ -100,6 +101,7 @@ public class ApiRestrictService {
                     "depth_rule": "[{...},{...}]"
                 }
                 * */
+                //普通规则
                 RuleVo ruleVo = redisCache.getForHash(RedisKeyBuild.createRedisKey(RedisKeyManage.ALL_RULE_HASH), RedisKeyBuild.createRedisKey(RedisKeyManage.RULE).getRelKey(),RuleVo.class);
                 //深度规则
                 String depthRuleStr = redisCache.getForHash(RedisKeyBuild.createRedisKey(RedisKeyManage.ALL_RULE_HASH), RedisKeyBuild.createRedisKey(RedisKeyManage.DEPTH_RULE).getRelKey(),String.class);
@@ -126,7 +128,7 @@ public class ApiRestrictService {
                         //深度规则构建
                         parameter = getDepthRuleParameter(parameter,commonKey,depthRuleVoList);
                     }
-                    //执行Lua脚本
+                    //执行Lua脚本,普通规则
                     ApiRestrictData apiRestrictData = apiRestrictCacheOperate
                             .apiRuleOperate(Collections.singletonList(JSON.toJSONString(parameter)), new Object[]{});
                     //是否需要进行限制

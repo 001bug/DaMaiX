@@ -69,14 +69,18 @@ public class PayService {
     @ServiceLock(name = COMMON_PAY,keys = {"#payDto.orderNumber"})
     @Transactional(rollbackFor = Exception.class)
     public String commonPay(PayDto payDto) {
+        // 查询支付账单,根据订单号.
         LambdaQueryWrapper<PayBill> payBillLambdaQueryWrapper = 
                 Wrappers.lambdaQuery(PayBill.class).eq(PayBill::getOutOrderNo, payDto.getOrderNumber());
         PayBill payBill = payBillMapper.selectOne(payBillLambdaQueryWrapper);
+
         if (Objects.nonNull(payBill) && !Objects.equals(payBill.getPayBillStatus(), PayBillStatus.NO_PAY.getCode())) {
             throw new DaMaiFrameException(BaseCode.PAY_BILL_IS_NOT_NO_PAY);
         }
+
         PayStrategyHandler payStrategyHandler = payStrategyContext.get(payDto.getChannel());
-        PayResult pay = payStrategyHandler.pay(String.valueOf(payDto.getOrderNumber()), payDto.getPrice(), 
+        // 调用支付渠道进行支付
+        PayResult pay = payStrategyHandler.pay(String.valueOf(payDto.getOrderNumber()), payDto.getPrice(),
                 payDto.getSubject(),payDto.getNotifyUrl(),payDto.getReturnUrl());
         if (pay.isSuccess()) {
             payBill = new PayBill();
@@ -100,44 +104,53 @@ public class PayService {
         NotifyVo notifyVo = new NotifyVo();
         log.info("回调通知参数 ===> {}", JSON.toJSONString(notifyDto));
         Map<String, String> params = notifyDto.getParams();
-   
+        //验证
         PayStrategyHandler payStrategyHandler = payStrategyContext.get(notifyDto.getChannel());
         boolean signVerifyResult = payStrategyHandler.signVerify(params);
         if (!signVerifyResult) {
             notifyVo.setPayResult(ALIPAY_NOTIFY_FAILURE_RESULT);
             return notifyVo;
         }
+        //按照支付结果异步通知中的描述，对支付结果中的业务内容进行二次校验
+        //1 商户需要验证该通知数据中的 out_trade_no 是否为商户系统中创建的订单号
         LambdaQueryWrapper<PayBill> payBillLambdaQueryWrapper =
                 Wrappers.lambdaQuery(PayBill.class).eq(PayBill::getOutOrderNo, params.get("out_trade_no"));
+        //查询账单
         PayBill payBill = payBillMapper.selectOne(payBillLambdaQueryWrapper);
+        //查询账单是否存在
         if (Objects.isNull(payBill)) {
             log.error("账单为空 notifyDto : {}",JSON.toJSONString(notifyDto));
             notifyVo.setPayResult(ALIPAY_NOTIFY_FAILURE_RESULT);
             return notifyVo;
         }
+        //如果账单已支付了，直接返回支付宝成功状态
         if (Objects.equals(payBill.getPayBillStatus(), PayBillStatus.PAY.getCode())) {
             log.info("账单已支付 notifyDto : {}",JSON.toJSONString(notifyDto));
             notifyVo.setOutTradeNo(payBill.getOutOrderNo());
             notifyVo.setPayResult(ALIPAY_NOTIFY_SUCCESS_RESULT);
             return notifyVo;
         }
+        //如果账单已取消了，直接返回支付宝成功状态
         if (Objects.equals(payBill.getPayBillStatus(), PayBillStatus.CANCEL.getCode())) {
             log.info("账单已取消 notifyDto : {}",JSON.toJSONString(notifyDto));
             notifyVo.setOutTradeNo(payBill.getOutOrderNo());
             notifyVo.setPayResult(ALIPAY_NOTIFY_SUCCESS_RESULT);
             return notifyVo;
         }
+        //如果账单已退单了，直接返回支付宝成功状态
         if (Objects.equals(payBill.getPayBillStatus(), PayBillStatus.REFUND.getCode())) {
             log.info("账单已退单 notifyDto : {}",JSON.toJSONString(notifyDto));
             notifyVo.setOutTradeNo(payBill.getOutOrderNo());
             notifyVo.setPayResult(ALIPAY_NOTIFY_SUCCESS_RESULT);
             return notifyVo;
         }
+        //验证支付宝回调传入的参数，防止恶意攻击
         boolean dataVerify = payStrategyHandler.dataVerify(notifyDto.getParams(), payBill);
         if (!dataVerify) {
             notifyVo.setPayResult(ALIPAY_NOTIFY_FAILURE_RESULT);
             return notifyVo;
         }
+        //更新账单为支付状态
         PayBill updatePayBill = new PayBill();
         updatePayBill.setPayBillStatus(PayBillStatus.PAY.getCode());
         LambdaUpdateWrapper<PayBill> payBillLambdaUpdateWrapper =
@@ -152,7 +165,9 @@ public class PayService {
     @ServiceLock(name = TRADE_CHECK,keys = {"#tradeCheckDto.outTradeNo"})
     public TradeCheckVo tradeCheck(TradeCheckDto tradeCheckDto) {
         TradeCheckVo tradeCheckVo = new TradeCheckVo();
+        //通过渠道获取具体的支付渠道策略
         PayStrategyHandler payStrategyHandler = payStrategyContext.get(tradeCheckDto.getChannel());
+        //调用支付sdk查询支付结果
         TradeResult tradeResult = payStrategyHandler.queryTrade(tradeCheckDto.getOutTradeNo());
         BeanUtil.copyProperties(tradeResult,tradeCheckVo);
         if (!tradeResult.isSuccess()) {
@@ -161,6 +176,7 @@ public class PayService {
         BigDecimal totalAmount = tradeResult.getTotalAmount();
         String outTradeNo = tradeResult.getOutTradeNo();
         Integer payBillStatus = tradeResult.getPayBillStatus();
+        //查询对应的账单信息.
         LambdaQueryWrapper<PayBill> payBillLambdaQueryWrapper = 
                 Wrappers.lambdaQuery(PayBill.class).eq(PayBill::getOutOrderNo, outTradeNo);
         PayBill payBill = payBillMapper.selectOne(payBillLambdaQueryWrapper);
@@ -168,11 +184,13 @@ public class PayService {
             log.error("账单为空 tradeCheckDto : {}",JSON.toJSONString(tradeCheckDto));
             return tradeCheckVo;
         }
+        //如果支付渠道的金额和账单的金额不一致，则直接返回
         if (payBill.getPayAmount().compareTo(totalAmount) != 0) {
             log.error("支付渠道 和库中账单支付金额不一致 支付渠道支付金额 : {}, 库中账单支付金额 : {}, tradeCheckDto : {}",
                     totalAmount,payBill.getPayAmount(),JSON.toJSONString(tradeCheckDto));
             return tradeCheckVo;
         }
+        //如果支付渠道的状态和账单的状态不一致，说明回调没有执行成功，则更新账单状态
         if (!Objects.equals(payBill.getPayBillStatus(), payBillStatus)) {
             log.warn("支付渠道和库中账单交易状态不一致 支付渠道payBillStatus : {}, 库中payBillStatus : {}, tradeCheckDto : {}",
                     payBillStatus,payBill.getPayBillStatus(),JSON.toJSONString(tradeCheckDto));

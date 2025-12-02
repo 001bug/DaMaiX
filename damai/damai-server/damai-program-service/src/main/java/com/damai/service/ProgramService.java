@@ -754,16 +754,22 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
     @Transactional(rollbackFor = Exception.class)
     public void operateProgramData(ProgramOperateDataDto programOperateDataDto){
         List<TicketCategoryCountDto> ticketCategoryCountDtoList = programOperateDataDto.getTicketCategoryCountDtoList();
+        //从库中查询座位集合
         List<Long> seatIdList = programOperateDataDto.getSeatIdList();
+        //根据节目id和座位id查询座位集合
         LambdaQueryWrapper<Seat> seatLambdaQueryWrapper = 
                 Wrappers.lambdaQuery(Seat.class)
                         .eq(Seat::getProgramId,programOperateDataDto.getProgramId())
                         .in(Seat::getId, seatIdList);
         List<Seat> seatList = seatMapper.selectList(seatLambdaQueryWrapper);
+
+        //如果库中的座位集合为空，则抛出异常
         if (CollectionUtil.isEmpty(seatList)) {
             throw new DaMaiFrameException(BaseCode.SEAT_NOT_EXIST);
         }
+        //如果库中的座位集合数量和传入的座位数量不相同，则抛出异常
         if (seatList.size() != seatIdList.size()) {
+            //如果库中的座位有一个已经是已售卖的状态，则抛出异常
             throw new DaMaiFrameException(BaseCode.SEAT_UPDATE_REL_COUNT_NOT_EQUAL_PRESET_COUNT);
         }
         for (Seat seat : seatList) {
@@ -771,6 +777,7 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
                 throw new DaMaiFrameException(BaseCode.SEAT_SOLD);
             }
         }
+        //将库中的座位集合批量更新为售卖状态
         LambdaUpdateWrapper<Seat> seatLambdaUpdateWrapper = 
                 Wrappers.lambdaUpdate(Seat.class)
                         .eq(Seat::getProgramId,programOperateDataDto.getProgramId())
@@ -778,7 +785,8 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
         Seat updateSeat = new Seat();
         updateSeat.setSellStatus(SellStatus.SOLD.getCode());
         seatMapper.update(updateSeat,seatLambdaUpdateWrapper);
-        
+
+        //将库中的对应票档进行更新库存
         int updateRemainNumberCount = 
                 ticketCategoryMapper.batchUpdateRemainNumber(ticketCategoryCountDtoList,programOperateDataDto.getProgramId());
         if (updateRemainNumberCount != ticketCategoryCountDtoList.size()) {
@@ -837,12 +845,14 @@ public class ProgramService extends ServiceImpl<ProgramMapper, Program> {
         if (Objects.nonNull(parentProgramCategory)) {
             programVo.setParentProgramCategoryName(parentProgramCategory.getName());
         }
-        
+
+        //查询节目演出时间
         LambdaQueryWrapper<ProgramShowTime> programShowTimeLambdaQueryWrapper =
                 Wrappers.lambdaQuery(ProgramShowTime.class).eq(ProgramShowTime::getProgramId, programId);
         ProgramShowTime programShowTime = Optional.ofNullable(programShowTimeMapper.selectOne(programShowTimeLambdaQueryWrapper))
                 .orElseThrow(() -> new DaMaiFrameException(BaseCode.PROGRAM_SHOW_TIME_NOT_EXIST));
-        
+
+        //组装演出时间信息
         programVo.setShowTime(programShowTime.getShowTime());
         programVo.setShowDayTime(programShowTime.getShowDayTime());
         programVo.setShowWeekTime(programShowTime.getShowWeekTime());

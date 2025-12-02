@@ -30,6 +30,11 @@ public class BaseParameterFilter extends OncePerRequestFilter {
     protected void doFilterInternal(final HttpServletRequest request, final HttpServletResponse response, final FilterChain filterChain) throws ServletException, IOException {
         ServletInputStream sis = request.getInputStream();
         String requestBody  = StringUtil.inputStreamConvertString(sis);
+        String uri = request.getRequestURI();
+        if(uri.startsWith("/actuator")){
+            filterChain.doFilter(request, response);
+            return;
+        }
         if (StringUtil.isNotEmpty(requestBody)) {
             requestBody = requestBody.replaceAll(" ", "").replaceAll("\r\n","");
         }

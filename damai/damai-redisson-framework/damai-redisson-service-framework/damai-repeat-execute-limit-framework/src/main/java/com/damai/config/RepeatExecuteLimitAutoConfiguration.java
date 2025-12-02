@@ -15,16 +15,17 @@ import org.springframework.context.annotation.Bean;
  * @description: 防重复幂等配置
  * @author: 阿星不是程序员
  **/
+//用于加载需要的对象.
 public class RepeatExecuteLimitAutoConfiguration {
-    
+    //锁键名处理器
     @Bean(LockInfoType.REPEAT_EXECUTE_LIMIT)
     public LockInfoHandle repeatExecuteLimitHandle(){
         return new RepeatExecuteLimitLockInfoHandle();
     }
-    
+    //幂等切面
     @Bean
     public RepeatExecuteLimitAspect repeatExecuteLimitAspect(LocalLockCache localLockCache,
-                                                             LockInfoHandleFactory lockInfoHandleFactory,
+                                                              LockInfoHandleFactory lockInfoHandleFactory,
                                                              ServiceLockFactory serviceLockFactory,
                                                              RedissonDataHandle redissonDataHandle){
         return new RepeatExecuteLimitAspect(localLockCache, lockInfoHandleFactory,serviceLockFactory,redissonDataHandle);

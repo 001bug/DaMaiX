@@ -68,6 +68,7 @@ public class AlipayStrategyHandler implements PayStrategyHandler {
             //电脑网站支付场景固定传值FAST_INSTANT_TRADE_PAY
             bizContent.put("product_code", "FAST_INSTANT_TRADE_PAY");
             request.setBizContent(bizContent.toString());
+            //发送一个请求到支付宝,阻塞形式等待返回
             AlipayTradePagePayResponse response = alipayClient.pageExecute(request,"POST");
             return new PayResult(response.isSuccess(),response.getBody());
         }catch (Exception e) {

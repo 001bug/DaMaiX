@@ -184,30 +184,38 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
     }
     
     public String pay(OrderPayDto orderPayDto) {
+        //查询生成的订单
         Long orderNumber = orderPayDto.getOrderNumber();
         LambdaQueryWrapper<Order> orderLambdaQueryWrapper =
                 Wrappers.lambdaQuery(Order.class).eq(Order::getOrderNumber, orderNumber);
         Order order = orderMapper.selectOne(orderLambdaQueryWrapper);
+        //订单为空，抛出异常信息
         if (Objects.isNull(order)) {
             throw new DaMaiFrameException(BaseCode.ORDER_NOT_EXIST);
         }
+        //订单已取消，抛出异常信息
         if (Objects.equals(order.getOrderStatus(), OrderStatus.CANCEL.getCode())) {
             throw new DaMaiFrameException(BaseCode.ORDER_CANCEL);
         }
+        //订单已支付，抛出异常信息
         if (Objects.equals(order.getOrderStatus(), OrderStatus.PAY.getCode())) {
             throw new DaMaiFrameException(BaseCode.ORDER_PAY);
         }
+        //订单已退款，抛出异常信息
         if (Objects.equals(order.getOrderStatus(), OrderStatus.REFUND.getCode())) {
             throw new DaMaiFrameException(BaseCode.ORDER_REFUND);
         }
+        //支付价格不等于订单价格，抛出异常信息
         if (orderPayDto.getPrice().compareTo(order.getOrderPrice()) != 0) {
             throw new DaMaiFrameException(BaseCode.PAY_PRICE_NOT_EQUAL_ORDER_PRICE);
         }
+        //调用支付服务进行支付
         PayDto payDto = getPayDto(orderPayDto, orderNumber);
         ApiResponse<String> payResponse = payClient.commonPay(payDto);
         if (!Objects.equals(payResponse.getCode(), BaseCode.SUCCESS.getCode())) {
             throw new DaMaiFrameException(payResponse);
         }
+        //订单服务再将结果返回给前端, 这个结果其实就是支付宝付款页面
         return payResponse.getData();
     }
     
@@ -237,6 +245,8 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
             throw new DaMaiFrameException(BaseCode.ORDER_NOT_EXIST);
         }
         BeanUtil.copyProperties(order,orderPayCheckVo);
+
+        //如果订单已取消则进行退款
         if (Objects.equals(order.getOrderStatus(), OrderStatus.CANCEL.getCode())) {
             RefundDto refundDto = new RefundDto();
             refundDto.setOrderNumber(String.valueOf(order.getOrderNumber()));
@@ -245,9 +255,11 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
             refundDto.setReason("延迟订单关闭");
             ApiResponse<String> response = payClient.refund(refundDto);
             if (response.getCode().equals(BaseCode.SUCCESS.getCode())) {
+                //调用支付服务退款成功后, 把订单更新为已退款状态.
                 Order updateOrder = new Order();
                 updateOrder.setEditTime(DateUtils.now());
                 updateOrder.setOrderStatus(OrderStatus.REFUND.getCode());
+                //将订单信息回退一下
                 orderMapper.update(updateOrder,Wrappers.lambdaUpdate(Order.class).eq(Order::getOrderNumber, order.getOrderNumber()));
             }else {
                 log.error("pay服务退款失败 dto : {} response : {}",JSON.toJSONString(refundDto),JSON.toJSONString(response));
@@ -256,11 +268,13 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
             orderPayCheckVo.setCancelOrderTime(DateUtils.now());
             return orderPayCheckVo;
         }
-        
+
+        //调用支付服务查询支付渠道的真实状态
         TradeCheckDto tradeCheckDto = new TradeCheckDto();
         tradeCheckDto.setOutTradeNo(String.valueOf(orderPayCheckDto.getOrderNumber()));
         tradeCheckDto.setChannel(Optional.ofNullable(PayChannel.getRc(orderPayCheckDto.getPayChannelType()))
                 .map(PayChannel::getValue).orElseThrow(() -> new DaMaiFrameException(BaseCode.PAY_CHANNEL_NOT_EXIST)));
+        //调用支付服务api去查询账单状况
         ApiResponse<TradeCheckVo> tradeCheckVoApiResponse = payClient.tradeCheck(tradeCheckDto);
         if (!Objects.equals(tradeCheckVoApiResponse.getCode(), BaseCode.SUCCESS.getCode())) {
             throw new DaMaiFrameException(tradeCheckVoApiResponse);
@@ -270,12 +284,15 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
         if (tradeCheckVo.isSuccess()) {
             Integer payBillStatus = tradeCheckVo.getPayBillStatus();
             Integer orderStatus = order.getOrderStatus();
+            //如果订单的状态和账单的状态不一致，说明支付的回调没有成功，那么就在这次更新数据
             if (!Objects.equals(orderStatus, payBillStatus)) {
                 orderPayCheckVo.setOrderStatus(payBillStatus);
                 try {
+                    //如果账单的状态是支付，那么执行订单支付的操作
                     if (Objects.equals(payBillStatus, PayBillStatus.PAY.getCode())) {
                         orderPayCheckVo.setPayOrderTime(DateUtils.now());
                         orderService.updateOrderRelatedData(order.getOrderNumber(),OrderStatus.PAY);
+                        //如果账单的状态是取消，那么执行订单取消的操作
                     }else if (Objects.equals(payBillStatus, PayBillStatus.CANCEL.getCode())) {
                         orderPayCheckVo.setCancelOrderTime(DateUtils.now());
                         orderService.updateOrderRelatedData(order.getOrderNumber(),OrderStatus.CANCEL);
@@ -292,18 +309,19 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
     
     
     public String alipayNotify(HttpServletRequest request){
-        
+        //将回调中的参数转为Map结构
         Map<String, String> params = new HashMap<>(256);
         if (request instanceof final CustomizeRequestWrapper customizeRequestWrapper) {
             String requestBody = customizeRequestWrapper.getRequestBody();
             params = StringUtil.convertQueryStringToMap(requestBody);
         }
+        //获取其中的订单号
         log.info("收到支付宝回调通知 params : {}",JSON.toJSONString(params));
         String outTradeNo = params.get("out_trade_no");
         if (StringUtil.isEmpty(outTradeNo)) {
             return "failure";
         }
-        
+        //加锁，防止并发问题
         RLock lock = serviceLockTool.getLock(LockType.Reentrant, ORDER_PAY_NOTIFY_CHECK,
                 new String[]{outTradeNo});
         lock.lock();
@@ -312,6 +330,7 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
             if (Objects.isNull(order)) {
                 throw new DaMaiFrameException(BaseCode.ORDER_NOT_EXIST);
             }
+            //如果订单已取消则进行退款
             if (Objects.equals(order.getOrderStatus(), OrderStatus.CANCEL.getCode())) {
                 RefundDto refundDto = new RefundDto();
                 refundDto.setOrderNumber(outTradeNo);
@@ -320,6 +339,7 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
                 refundDto.setReason("延迟订单关闭");
                 ApiResponse<String> response = payClient.refund(refundDto);
                 if (response.getCode().equals(BaseCode.SUCCESS.getCode())) {
+                    //调用支付服务退款成功后，把订单更新为已退款状态
                     Order updateOrder = new Order();
                     updateOrder.setEditTime(DateUtils.now());
                     updateOrder.setOrderStatus(OrderStatus.REFUND.getCode());
@@ -334,10 +354,12 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
             NotifyDto notifyDto = new NotifyDto();
             notifyDto.setChannel(PayChannel.ALIPAY.getValue());
             notifyDto.setParams(params);
+            //调用支付服务, 将回调中的参数进行签名验证
             ApiResponse<NotifyVo> notifyResponse = payClient.notify(notifyDto);
             if (!Objects.equals(notifyResponse.getCode(), BaseCode.SUCCESS.getCode())) {
                 throw new DaMaiFrameException(notifyResponse);
             }
+            //如果验证过程的话则进行订单状态更新
             if (ALIPAY_NOTIFY_SUCCESS_RESULT.equals(notifyResponse.getData().getPayResult())) {
                 try {
                     orderService.updateOrderRelatedData(Long.parseLong(notifyResponse.getData().getOutTradeNo())
@@ -442,36 +464,50 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
     
     public void updateProgramRelatedDataResolution(Long programId,Map<Long,List<Long>> seatMap,OrderStatus orderStatus){
         Map<Long, List<SeatVo>> seatVoMap = new HashMap<>(seatMap.size());
+        //从redis中查询锁定中的座位.
         seatMap.forEach((k,v) -> seatVoMap.put(k,redisCache.multiGetForHash(
                 RedisKeyBuild.createRedisKey(RedisKeyManage.PROGRAM_SEAT_LOCK_RESOLUTION_HASH, programId, k),
                 v.stream().map(String::valueOf).collect(Collectors.toList()), SeatVo.class)));
         if (CollectionUtil.isEmpty(seatVoMap)) {
             throw new DaMaiFrameException(BaseCode.LOCK_SEAT_LIST_EMPTY);
         }
+        //票档相关数据
         JSONArray jsonArray = new JSONArray();
+        //要添加的座位相关数据
         JSONArray addSeatDatajsonArray = new JSONArray();
         List<TicketCategoryCountDto> ticketCategoryCountDtoList = new ArrayList<>(seatVoMap.size());
+        //锁定的座位相关数据
         JSONArray unLockSeatIdjsonArray = new JSONArray();
+        //锁定的座位id集合(用于发送给节目服务使用)
         List<Long> unLockSeatIdList = new ArrayList<>();
         seatVoMap.forEach((k,v) -> {
             JSONObject unLockSeatIdjsonObject = new JSONObject();
+            //锁定的座位hash的key
             unLockSeatIdjsonObject.put("programSeatLockHashKey", RedisKeyBuild.createRedisKey(
                     RedisKeyManage.PROGRAM_SEAT_LOCK_RESOLUTION_HASH, programId, k).getRelKey());
+            //扣除锁定的座位数据
             unLockSeatIdjsonObject.put("unLockSeatIdList",v.stream()
                     .map(SeatVo::getId).map(String::valueOf).collect(Collectors.toList()));
             unLockSeatIdjsonArray.add(unLockSeatIdjsonObject);
             JSONObject seatDatajsonObject = new JSONObject();
+            //要添加的座位hash的key
             String seatHashKeyAdd = "";
+            //如果是订单取消操作
             if (Objects.equals(orderStatus.getCode(), OrderStatus.CANCEL.getCode())) {
+                //要添加的座位hash的key就是未售卖座位
                 seatHashKeyAdd = RedisKeyBuild.createRedisKey(
                         RedisKeyManage.PROGRAM_SEAT_NO_SOLD_RESOLUTION_HASH, programId, k).getRelKey();
                 for (SeatVo seatVo : v) {
+                    //座位状态要改成未售卖
                     seatVo.setSellStatus(SellStatus.NO_SOLD.getCode());
                 }
+                //如果是订单支付操作
             }else if (Objects.equals(orderStatus.getCode(), OrderStatus.PAY.getCode())) {
+                //要添加的座位hash的key就是已售卖座位
                 seatHashKeyAdd = RedisKeyBuild.createRedisKey(
                         RedisKeyManage.PROGRAM_SEAT_SOLD_RESOLUTION_HASH, programId, k).getRelKey();
                 for (SeatVo seatVo : v) {
+                    //座位状态要改成已售卖
                     seatVo.setSellStatus(SellStatus.SOLD.getCode());
                 }
             }
@@ -481,6 +517,8 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
                 seatDataList.add(String.valueOf(seatVo.getId()));
                 seatDataList.add(JSON.toJSONString(seatVo));
             }
+            //如果是订单取消的操作，那么添加到未售卖的座位数据
+            //如果是订单支付的操作，那么添加到已售卖的座位数据
             seatDatajsonObject.put("seatDataList",seatDataList);
             addSeatDatajsonArray.add(seatDatajsonObject);
             JSONObject jsonObject = new JSONObject();
@@ -498,16 +536,22 @@ public class OrderService extends ServiceImpl<OrderMapper, Order> {
         List<String> keys = new ArrayList<>();
         keys.add(String.valueOf(orderStatus.getCode()));
         Object[] data = new String[3];
+        //扣除锁定的座位数据
         data[0] = JSON.toJSONString(unLockSeatIdjsonArray);
         data[1] = JSON.toJSONString(addSeatDatajsonArray);
         data[2] = JSON.toJSONString(jsonArray);
+        //执行lua脚本
         orderProgramCacheResolutionOperate.programCacheReverseOperate(keys,data);
         if (Objects.equals(orderStatus.getCode(), OrderStatus.PAY.getCode())) {
             ProgramOperateDataDto programOperateDataDto = new ProgramOperateDataDto();
             programOperateDataDto.setProgramId(programId);
+            //要将锁定修改已售卖的座位id集合
             programOperateDataDto.setSeatIdList(unLockSeatIdList);
+            //票档数量
             programOperateDataDto.setTicketCategoryCountDtoList(ticketCategoryCountDtoList);
+            //修改为已售卖状态
             programOperateDataDto.setSellStatus(SellStatus.SOLD.getCode());
+            //放到延迟队列中
             delayOperateProgramDataSend.sendMessage(JSON.toJSONString(programOperateDataDto));
         }
     }

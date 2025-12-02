@@ -48,6 +48,7 @@ public class DelayOrderCancelConsumer implements ConsumerTask {
     
     @Override
     public String topic() {
+        //这个表明消费者订阅了哪个主题队列
         return SpringUtil.getPrefixDistinctionName() + "-" + DELAY_ORDER_CANCEL_TOPIC;
     }
 }
